@@ -1,0 +1,72 @@
+[
+  {
+    "id": "second-marx",
+    "file": "二刷马原学成选择题合集.pdf",
+    "title": "二刷马原学成连线题",
+    "module": "马克思主义基本原理",
+    "kind": "matching"
+  },
+  {
+    "id": "second-mao",
+    "file": "二刷毛中特学成连线题合集.pdf",
+    "title": "二刷毛中特学成连线题",
+    "module": "毛泽东思想和中国特色社会主义理论体系概论",
+    "kind": "matching"
+  },
+  {
+    "id": "second-xi",
+    "file": "二刷新思想学成连线题.pdf",
+    "title": "二刷新思想学成连线题",
+    "module": "习近平新时代中国特色社会主义思想概论",
+    "kind": "matching"
+  },
+  {
+    "id": "history-second",
+    "file": "二刷史纲学成选择题合集 (1).pdf",
+    "title": "二刷史纲学成连线题",
+    "module": "中国近现代史纲要",
+    "kind": "matching"
+  },
+  {
+    "id": "ethics-match",
+    "file": "二刷思修学成连线题.pdf",
+    "title": "二刷思修学成连线题",
+    "module": "思想道德与法治",
+    "kind": "matching"
+  },
+  {
+    "id": "hat-marx",
+    "file": "肖帽子题-马原.pdf",
+    "title": "肖帽子题-马原 · 蓝色考点挖空",
+    "module": "马克思主义基本原理",
+    "kind": "cloze"
+  },
+  {
+    "id": "hat-mao",
+    "file": "肖帽子题-毛中特.pdf",
+    "title": "肖帽子题-毛中特 · 蓝色考点挖空",
+    "module": "毛泽东思想和中国特色社会主义理论体系概论",
+    "kind": "cloze"
+  },
+  {
+    "id": "hat-xi",
+    "file": "肖帽子题-新思想.pdf",
+    "title": "肖帽子题-新思想 · 蓝色考点挖空",
+    "module": "习近平新时代中国特色社会主义思想概论",
+    "kind": "cloze"
+  },
+  {
+    "id": "hat-history",
+    "file": "肖帽子题-史纲.pdf",
+    "title": "肖帽子题-史纲 · 蓝色考点挖空",
+    "module": "中国近现代史纲要",
+    "kind": "cloze"
+  },
+  {
+    "id": "hat-ethics",
+    "file": "肖帽子题-思修 .pdf",
+    "title": "肖帽子题-思修 · 蓝色考点挖空",
+    "module": "思想道德与法治",
+    "kind": "cloze"
+  }
+]

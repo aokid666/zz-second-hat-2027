@@ -1,0 +1,57 @@
+name: Build second-round and blue-answer cloze
+on:
+  push:
+    paths: ['pdf/**', 'tools/**', '.github/workflows/build.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: second-hat-build
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 30
+      - uses: actions/checkout@v4
+        with:
+          repository: aokid666/zhengzhi-720
+          path: .site-source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install PyMuPDF==1.26.6
+      - run: python tools/build.py --site .site-source
+      - name: Preserve generated validation and assets
+        if: always()
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data
+          if [ -d img ]; then git add img; fi
+          if ! git diff --cached --quiet; then git commit -m 'Build source-bound matching and protected blue cloze'; git fetch origin main; git merge --no-edit origin/main; git push; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: second-hat-validation
+          path: data/*.json
+      - run: |
+          mkdir -p _site
+          cp -a pdf img data index.html .nojekyll _site/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/deploy-pages@v4
