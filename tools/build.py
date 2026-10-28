@@ -121,7 +121,13 @@ def clozes(src,ps):
    if blue(c):
     active.append((i,c))
     if c['c'] in '；;。':flush()
-   elif c['c'].isspace() and active and not c.get('break'):continue
+   elif c['c'].isspace() and active:
+    nxt=chars[i+1] if i+1<len(chars) else None;prev=active[-1][1]
+    # Word sometimes emits a wrapped final syllable as a new PDF block.
+    # Join only at the page's right margin into the following indented line.
+    wrap=bool(nxt and blue(nxt) and prev['b'][2]>=ps[prev['p']-1]['width']-70 and nxt['b'][0]<ps[nxt['p']-1]['width']*.2 and ((nxt['p']==prev['p'] and 0<nxt['b'][1]-prev['b'][1]<40) or (nxt['p']==prev['p']+1 and prev['b'][1]>ps[prev['p']-1]['height']*.75 and nxt['b'][1]<ps[nxt['p']-1]['height']*.25)))
+    if not c.get('break') or wrap:continue
+    flush()
    else:flush()
   flush()
   atoms=groups;groups=[];protected_blue=[]
