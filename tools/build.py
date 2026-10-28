@@ -2,8 +2,10 @@
 import argparse,collections,concurrent.futures,hashlib,json,pathlib,re
 import fitz
 import matching
+import semantic
 ROOT=pathlib.Path(__file__).resolve().parents[1];BASE='https://aokid666.github.io/zz-second-hat-2027/'
 SOURCES=json.loads((ROOT/'tools/sources.json').read_text());ERRORS=[]
+OVERRIDES=json.loads((ROOT/'tools/prompt-overrides.json').read_text())
 def dump(n,d):p=ROOT/'data'/n;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(d,ensure_ascii=False,separators=(',',':')))
 def norm(t):return re.sub(r'[^\u4e00-\u9fffA-Za-z0-9]','',t).lower()
 def layout(doc):
@@ -47,7 +49,7 @@ def matches(src,ps,site):
  # Existing matching exercises keep their IDs and learning records if all item mappings agree.
  if src['id'] in ['history-second','ethics-match']:
   old=json.loads((site/'data/practice'/f'{src["id"]}.json').read_text())['questions']
-  if len(qs)==len(old) and all(sig(a)==sig(b) for a,b in zip(qs,old)):return old,True
+  if len(qs)==len(old) and sorted(json.dumps(sig(q),sort_keys=True) for q in qs)==sorted(json.dumps(sig(q),sort_keys=True) for q in old):return old,True
   ERRORS.append(src['id']+': existing source differs; review before replacing records')
  return qs,False
 
@@ -101,18 +103,36 @@ def clozes(src,ps):
    if chars:chars.append({'c':'\n','color':0,'p':pn,'break':chars[-1].get('block')!=l['block']})
    chars.extend(l['chars'])
   text=''.join(c['c'] for c in chars);protected,rule=protections(text)
+  anchor=OVERRIDES.get(src['id'],{}).get(str(ei))
+  if anchor:
+   compact=''.join(c for c in text if not c.isspace());needle=''.join(anchor.split());idx=compact.find(needle)
+   if idx<0:ERRORS.append(src['id']+': manual prompt anchor missing '+str(ei))
+   else:
+    positions=[i for i,c in enumerate(text) if not c.isspace()];protected=[(0,positions[idx+len(needle)-1]+1)];rule='reviewed-prompt'
+  reference=semantic.find(src['module'],text)
+  norm_indices=[i for i,c in enumerate(text) if re.match(r'[\u4e00-\u9fffA-Za-z0-9]',c)]
+  left=set(norm_indices[j] for j in reference['leftPositions']) if reference else set()
+  right=set(norm_indices[j] for j in reference['rightPositions']) if reference else set()
   isprotected=lambda i:any(lo<=i<hi for lo,hi in protected)
   groups=[];active=[]
   def flush():
    if active:groups.append(active[:]);active.clear()
   for i,c in enumerate(chars):
-   if blue(c) and not isprotected(i):
+   if blue(c):
     active.append((i,c))
     if c['c'] in '；;。':flush()
-   elif c['c'].isspace() and active and not c.get('break') and not isprotected(i):continue
+   elif c['c'].isspace() and active and not c.get('break'):continue
    else:flush()
   flush()
-  audit={'entry':ei,'chapter':e['chapter'],'no':e['no'],'section':e['section'],'text':text,'rule':rule,'protected':protected,'bluePrompt':[''.join(c['c'] for j,c in enumerate(chars) if blue(c) and isprotected(j))],'answers':[''.join(c['c'] for _,c in g) for g in groups]}
+  atoms=groups;groups=[];protected_blue=[]
+  for g in atoms:
+   ids={j for j,c in g};l=len(ids&(left-right));r=len(ids&(right-left));eligible=any(not isprotected(j) for j,c in g)
+   if r>=2 and r>=l:eligible=True
+   elif l>=2 and l>r:eligible=False
+   (groups if eligible else protected_blue).append(g)
+  if reference and rule=='review':rule='question-answer-evidence'
+  protected=[(g[0][0],g[-1][0]+1) for g in protected_blue]
+  audit={'entry':ei,'chapter':e['chapter'],'no':e['no'],'section':e['section'],'text':text,'rule':rule,'protected':protected,'bluePrompt':[''.join(c['c'] for g in protected_blue for j,c in g)],'matchedPrompt':reference['prompt'] if reference else None,'answers':[''.join(c['c'] for _,c in g) for g in groups]}
   audits.append(audit)
   if rule=='review' and any(blue(c) for c in chars):needs.append(audit);continue
   if not groups:skip.append(audit);continue
@@ -128,7 +148,13 @@ def clozes(src,ps):
    ls=[l for n,l in e['lines'] if n==pn];x=max(0,min(l['b'][0] for l in ls)-3);y=max(0,min(l['b'][1] for l in ls)-3);right=min(ps[pn-1]['width'],max(l['b'][2] for l in ls)+3);bottom=min(ps[pn-1]['height'],max(l['b'][3] for l in ls)+3)
    refs.append({'page':pn,'b':[x,y,right-x,bottom-y]})
    spans.extend({'page':pn,'text':s['text'],'x':s['origin'][0],'y':s['origin'][1],'size':s['size'],'font':s['font'],'color':s['color'],'b':s['bbox']} for l in ls for s in l['spans'])
-  start=protected[0][1];prompt=re.sub(r'^\d+[.．]\s*','',text[:start]).strip()
+  masked={j:k for k,g in enumerate(groups) for j,c in g};seen=set();parts=[]
+  for j,c in enumerate(chars):
+   if j in masked:
+    key=masked[j]
+    if key not in seen:parts.append('［　］');seen.add(key)
+   else:parts.append(c['c'])
+  prompt=re.sub(r'^\d+[.．]\s*','',''.join(parts)).strip()[:200]
   q=matching.common(src['id'],'cloze',len(qs)+1,src['module'],e['chapter'],prompt)
   q.update(originalNo=e['no'],section='蓝色考点挖空 · '+e['section'],qRefs=refs,keyRefs=refs,analysis=[{'k':'原文蓝色考点','t':'；'.join(m['text'] for m in masks)}],cloze={'masks':masks,'spans':spans,'text':text,'protected':protected,'rule':rule,'sourceEntry':ei})
   qs.append(q)
@@ -152,11 +178,20 @@ def render(job):
  id,pn=job;d=fitz.open(ROOT/'pdf'/f'{id}.pdf');out=ROOT/'img'/id/f'{pn:03}.png';out.parent.mkdir(parents=True,exist_ok=True);d[pn-1].get_pixmap(matrix=fitz.Matrix(3.125,3.125),alpha=False).save(out);b=out.read_bytes();return {'page':pn,'ext':'png','bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()}
 def main():
  p=argparse.ArgumentParser();p.add_argument('--site',type=pathlib.Path,required=True);args=p.parse_args();books=[];banks={};reports={};reused=[];manifests=[]
+ for filename in ['cf-upper','cf-lower']:
+  for q in json.loads((args.site/'data/practice'/f'{filename}.json').read_text())['questions']:
+   semantic.add(q['module'],q['stem'][-200:],'；'.join(q['options'].get(k,'') for k in q['answer']),'choice')
  for src in SOURCES:
+  if src['kind']=='cloze' and not semantic.indexes:semantic.prepare()
   doc=fitz.open(ROOT/'pdf'/f'{src["id"]}.pdf');ps=layout(doc);id=src['id'];sha=hashlib.sha256((ROOT/'pdf'/f'{id}.pdf').read_bytes()).hexdigest()
   if src['kind']=='matching':qs,reuse=matches(src,ps,args.site);report={'cards':len(qs),'reused':reuse};reused.extend([id] if reuse else [])
   else:qs,report=clozes(src,ps);reuse=False
   if report.get('needsReview'):ERRORS.append(id+': '+str(len(report['needsReview']))+' prompts need semantic review')
+  if src['kind']=='matching':
+   for q in qs:
+    for item in q['left']:
+     answer='；'.join(r['text'] for key in q['matchMap'][item['key']] for r in q['right'] if r['key']==key)
+     semantic.add(src['module'],item['text'],answer,'matching')
   reports[id]=report;dump(id+'-audit.json',report)
   if not reuse:
    match_sources(qs,args.site);chapters=[]
